@@ -17,6 +17,8 @@ import time
 import random
 import math
 import scipy
+from collections import defaultdict
+import igraph as ig
 
 
 def create_MultilayerGraph(N, p_g1=0.1, p_g2=0.1, seed_g1=None, seed_g2=None, intra_layer_edges_weight=None,
@@ -117,7 +119,8 @@ def random_0_model(Graph, N, nswap=1, max_tries=100, connected=True):
 
     n = 0  # 已尝试重连进行的次数
     swapcount = 0  # 已重连成功的次数
-    edges_up = Graph.get_intra_layer_edges_of_layer(layer=0)
+    # edges_up = Graph.get_intra_layer_edges_of_layer(layer=0)
+    edges_up = get_edge_0(Graph, analy_layer=0)
     nodes_up = list(Graph.nodes)[0:N]
     while swapcount < nswap:
         n = n + 1
@@ -139,6 +142,7 @@ def random_0_model(Graph, N, nswap=1, max_tries=100, connected=True):
                     edges_up.append((u, v))
                     continue
             swapcount = swapcount + 1
+            print(f'已成功交换{swapcount}次')
         if n >= max_tries:
             print(f"Maximum number of swap attempts {n} exceeded before desired swaps achieved {nswap}.")
             break
@@ -225,6 +229,7 @@ def random_1_model(Graph, N, nswap=1, max_tries=100, connected=True, analy_layer
                         Graph.remove_edge(x, v)
                         continue
                 swapcount = swapcount + 1
+                print(f'已成功交换{swapcount}次')
     return Graph
 
 
@@ -312,6 +317,7 @@ def random_2_model(Graph, N, nswap=1, max_tries=100, connected=True, analy_layer
                             Graph.remove_edge(x, v)
                             continue
                     swapcount = swapcount + 1
+                    print(f'已成功交换{swapcount}次')
     return Graph
 
 
@@ -426,6 +432,7 @@ def random_25_model(Graph, N, nswap=1, max_tries=100, connected=True, analy_laye
                             Graph.remove_edge(x, v)
                             continue
                     swapcount = swapcount + 1
+                    print(f'已成功交换{swapcount}次')
     return Graph
 
 
@@ -527,6 +534,7 @@ def random_3_model(Graph, N, nswap=1, max_tries=100, connected=True, analy_layer
                             Graph.remove_edge(x, v)
                             continue
                     swapcount = swapcount + 1
+                    print(f'已成功交换{swapcount}次')
     return Graph
 
 
@@ -653,7 +661,12 @@ def isRichClubTwo_0_model(Graph, N, k1, k2, rich=True, nswap=1, max_tries=100):
     swapcount = 0
     # Graph
     up_nodes = list(Graph.nodes)[0:N]
+    time_start = int(time.time())
     while swapcount < nswap:
+        time_end = int(time.time())
+        if time_end - time_start > 60:
+            print(f'尝试次数 {n} 已超过超时，而交换成功的次数为{swapcount}')
+            break
         if n >= max_tries:
             print(f'尝试次数 {n} 已超过允许的最大尝试次数，而交换成功的次数为{swapcount}')
             break
@@ -686,11 +699,13 @@ def isRichClubTwo_0_model(Graph, N, k1, k2, rich=True, nswap=1, max_tries=100):
             if x_upNode_degree > k1 and y_upNode_degree <= k1 and x_downNode_degree <= k2 and y_downNode_degree > k2:
                 swap_one_node(Graph, x_upNode, y_upNode)
                 swapcount += 1
+                time_start = int(time.time())
                 print(x_upNode, y_upNode)
                 print(f'有效交换 {swapcount}次')
             if x_upNode_degree <= k1 and y_upNode_degree > k1 and x_downNode_degree > k2 and y_downNode_degree <= k2:
                 swap_one_node(Graph, x_upNode, y_upNode)
                 print(x_upNode, y_upNode)
+                time_start = int(time.time())
                 swapcount += 1
                 print(f'有效交换 {swapcount}次')
         else:
@@ -715,6 +730,12 @@ def isRichClubTwo_0_model(Graph, N, k1, k2, rich=True, nswap=1, max_tries=100):
 
 
 def get_edges(Graph, N):
+    """
+    已经弃用，找双层网络的边请使用lm.get_edge_0方法
+    :param Graph:
+    :param N:
+    :return:
+    """
     edges = []
     for i in range(N):
         # 找出本层所有相邻节点，不包含其它层的
@@ -752,7 +773,7 @@ def graph_to_csv(G):
     return df
 
 
-# 创建具有或者不具有富人俱乐部特性的单层零模型网络以及返回其富人俱乐部特征相关系数
+# 创建具有或者不具有富人俱乐部特性的  单层零模型网络以及返回其富人俱乐部特征相关系数
 def isRichClubSingle_0_model(Graph, k=1, rich=True, nswap=1, max_tries=100, connected=1):
     richG = None
     if rich:
@@ -1421,15 +1442,6 @@ def huizhi_geshi_heatmap():
     plt.rcParams['font.family'] = 'sans-serif'
 
 
-def huizhi_geshi_heatmap():
-    sns.set(style="darkgrid", palette="muted")
-    sns.set_context("notebook", font_scale=0.8)
-    plt.figure(figsize=(6, 5), dpi=144, facecolor=None, edgecolor=None, frameon=False)
-    plt.rcParams['font.sans-serif'] = 'SimHei'  # 调节字体显示为中文
-    plt.rcParams['axes.unicode_minus'] = False  # 解决负号'-'显示为方块的问题
-    plt.rcParams['font.family'] = 'sans-serif'
-
-
 def degree_feature_matrix(Graph):
     """
     求度特征矩阵，以热力图的形式呈现出来
@@ -1669,6 +1681,15 @@ def hiuzhi_rich_remain_average_degree(Graph, analy_layer, k1, k2, nswap=20000, m
     df = pd.DataFrame(res, columns=['y', 'x', 'region'])
     sns.lineplot(x="x", y="y", hue="region", data=df)
     plt.show()
+
+
+"""
+    检验方法
+"""
+
+# Z检验
+def z_jianyan(origin_val, mean_val, std_val):
+    return (origin_val - mean_val) / std_val
 
 
 """
@@ -1959,10 +1980,162 @@ def property_matrix_relative_difference_fun(fun_val_pl1, fun_val_pl2):
         return 0
     return 2 * (abs(fun_val_pl1 - fun_val_pl2)) / (abs(fun_val_pl1) + abs(fun_val_pl2))
 
+"""
+    聚类评估方法，纯度purity和F-measure
+"""
+def purity_single(community_list1, community_list2, G1_nodes, G2_nodes):
+    len_community_list1 = len(community_list1)
+    len_community_list2 = len(community_list2)
+    sum_k = 0
+    for i in range(len_community_list1):
+        temp_list = community_list1[i]
+        if (len(temp_list) < 2) and (temp_list[0] not in G1_nodes):
+            continue
+        # 检测被匹配的网络的每一个社区与当前匹配社会的共同最大的节点数
+        max_cun = 0
+        for j in range(0, len_community_list2):
+            temp_list2 = community_list2[j]
+            if (len(temp_list2) < 2) and (temp_list2[0] not in G2_nodes):
+                continue
+            cun = get_list_intersection_length(temp_list, community_list2[j])
+            if cun > max_cun:
+                max_cun = cun
+        # print(max_cun)
+        sum_k += max_cun
+
+    return sum_k / len(G1_nodes)
+
+def get_list_intersection_length(list1, list2):
+    return len(set(list1).intersection(set(list2)))
+
+def get_Graph_nodes(layer_fileName):
+    nodes = []
+    with open(layer_fileName, 'r') as f:
+        for line in f:
+            strs = line.strip().split(' ')
+            node1 = int(strs[0])
+            node2 = int(strs[1])
+            if node1 not in nodes:
+                nodes.append(node1)
+            if node2 not in nodes:
+                nodes.append(node2)
+    return nodes
+
+def based_community_layer_similarity_by_purity(layer_edge_1, layer_edge_2):
+
+    G1_nodes = get_Graph_nodes(layer_edge_1)
+    G2_nodes = get_Graph_nodes(layer_edge_2)
+    Gi_1 = ig.Graph.Read_Edgelist(layer_edge_1)
+    Gi_2 = ig.Graph.Read_Edgelist(layer_edge_2)  # 基于这些连边使用igraph创建一个新网络
+    G1 = Gi_1.as_undirected()
+    G2 = Gi_2.as_undirected()
+    # 检测到的社区+
+    community_list1 = G1.community_multilevel(weights=None, return_levels=False)
+    community_list2 = G2.community_multilevel(weights=None, return_levels=False)
+    # print(community_list1)
+    # print(community_list2)
+    # 检测purity
+    purity1 = purity_single(community_list1, community_list2, G1_nodes, G2_nodes)
+    purity2 = purity_single(community_list2, community_list1, G2_nodes, G1_nodes)
+    if (purity1 + purity2) == 0 :
+        print(f'计算purity的纯度0')
+        return 0
+    purity = 2 * purity1 * purity2 / (purity1 + purity2)
+    print(f'计算purity的纯度{purity}')
+    return purity
+
+def f_measure(community_list1, community_list2, G1_nodes, G2_nodes):
+    len_community_list1 = len(community_list1)
+    len_community_list2 = len(community_list2)
+    # 计算聚类F-Measure的平均值
+    sum_f = 0
+    len_community_real = 0
+    for i in range(len_community_list1):
+        # 计算单个F-Measure
+        temp_list = community_list1[i]
+        if (len(temp_list) < 2) and (temp_list[0] not in G1_nodes):
+            continue
+        # 计算 prec预测值
+        len_community_real += 1
+        max_cun = 0
+        for j in range(0, len_community_list2):
+            temp_list2 = community_list2[j]
+            if (len(temp_list2) < 2) and (temp_list2[0] not in G2_nodes):
+                continue
+            cun = get_list_intersection_length(temp_list, community_list2[j])
+            if cun > max_cun:
+                max_cun = cun
+        prec_val = max_cun / len(temp_list)
+
+        # 计算 recall 召回值
+        # 这个怎么求的呢？是根据G1网络的每一个社区进行遍历，
+        # 遍历第一个社区，第一个社区中的节点与G2网络中的每一个社区进行遍历，找到G2社区中与该社区
+        # 有共同节点数最大的G2中的社区，得到其社区的节点的总个数值 Mji (总个数值 Mji 是共有节点的个数，G1网络中没有的节点则不算)
+        ext_coms = {cid: nodes for cid, nodes in enumerate(community_list2) if len(nodes) > 2 or ((len(nodes) > 2) and(nodes[0] not in G2_nodes))}
+        node_to_com = defaultdict(list)
+        for cid, nodes in list(ext_coms.items()):
+            for n in nodes:
+                node_to_com[n].append(cid)
+
+        ids = {}
+        for n in temp_list:
+            try:
+                idd_list = node_to_com[n]
+                for idd in idd_list:
+                    if idd not in ids:
+                        ids[idd] = 1
+                    else:
+                        ids[idd] += 1
+            except KeyError:
+                pass
+        maximal_match = {label: p for label, p in list(ids.items()) if p == max(ids.values())}
+        if maximal_match == {}:
+            f_i = 0
+        else :
+            label = list(maximal_match.keys())[0]
+            m_ji = 0
+            for n in community_list2[label]:
+                if n in G1_nodes:
+                    m_ji += 1
+            recall_val = max_cun / m_ji
+            f_i = 2 * prec_val * recall_val / (prec_val + recall_val)
+        # print('单个f值为: ' , f_i)
+        # print(f'prec{max_cun}/{len(temp_list)}recall{max_cun}/{m_ji}')
+        sum_f += f_i
+    print(f'len_community_real: {len_community_real}')
+    # print(len_community_real)
+    return sum_f / len_community_real
+
+def based_community_layer_similarity_by_f_measure(layer_edge_1, layer_edge_2):
+
+    G1_nodes = get_Graph_nodes(layer_edge_1)
+    G2_nodes = get_Graph_nodes(layer_edge_2)
+    Gi_1 = ig.Graph.Read_Edgelist(layer_edge_1)
+    Gi_2 = ig.Graph.Read_Edgelist(layer_edge_2)  # 基于这些连边使用igraph创建一个新网络
+    G1 = Gi_1.as_undirected()
+    G2 = Gi_2.as_undirected()
+    # 检测到的社区
+    community_list1 = G1.community_multilevel(weights=None, return_levels=False)
+    community_list2 = G2.community_multilevel(weights=None, return_levels=False)
+
+    # 检测purity
+    f_measure_1 = f_measure(community_list1, community_list2, G1_nodes, G2_nodes)
+    f_measure_2 = f_measure(community_list2, community_list1, G2_nodes, G1_nodes)
+    if f_measure_1 == 1:
+        print(f'f_measure_1的计算值为1')
+        return 0
+    if f_measure_2 == 1:
+        print(f'f_measure_2的计算值为1')
+        return 0
+    if (f_measure_1 + f_measure_2) == 0:
+        print(f'计算f_measure的纯度0')
+        return 0
+    f_val = 2 * f_measure_1 * f_measure_2 / (f_measure_1 + f_measure_2)
+    print(f'计算f_measure的纯度{f_val}')
+    return f_val
 
 
-
-def D_value(a_addr, b_addr, filename_single, filename_multi, W1=0.45, W2=0.45, W3=0.1):
+def D_value(a_addr, b_addr, filename_single, filename_multi, is_ling_modle=False, W1=0.45, W2=0.45, W3=0.1):
     """
     计算a_addr, b_addr 两个图的相似性，D结果值为0就是相似的
     :param W1: 设置好的权重值0.45
@@ -1975,7 +2148,9 @@ def D_value(a_addr, b_addr, filename_single, filename_multi, W1=0.45, W2=0.45, W
     # 生成网络图
     name_list_a, name_list_b = ['city_name', 'city_id_name'], ['city_name', 'city_id_name']
     # name_list_a, name_list_b = [], []
-    total_city, G_a, G_b = read_csv(a_addr, b_addr, name_list_a, name_list_b, filename_single, filename_multi)
+
+    total_city, G_a, G_b = read_csv(a_addr, b_addr,is_ling_modle, name_list_a, name_list_b, filename_single, filename_multi)
+
     N = len(total_city)
     nodes = range(N)  # 节点列表
     first_value = first(G_a, G_b)
@@ -2115,7 +2290,7 @@ def first(Graph_a, Graph_b):
     u_g_b = UG(Graph_b)
 
     a_len = len(u_g_a)
-    b_len = len(u_g_a)
+    b_len = len(u_g_b)
     max_v = max(a_len, b_len)
 
     # 将u_g_au_g_b与参数不足之处补0
@@ -2125,7 +2300,7 @@ def first(Graph_a, Graph_b):
             # miu_j_a.append(0)
             u_g_a[a_len + 1] = 0
             a_len += 1
-    else:
+    elif (b_len != max_v):
         adj = a_len - b_len
         for adi_index in range(0, adj):
             u_g_b[b_len + 1] = 0
@@ -2230,7 +2405,7 @@ def N_I_J(Graph):
     return n_i_j_list
 
 
-def read_csv(a_addr, b_addr, name_list_a, name_list_b, filename_single, filename_multi):
+def read_csv(a_addr, b_addr, is_ling_modle, name_list_a, name_list_b, filename_single, filename_multi):
     # 读取数据
     df_a = pd.read_csv(a_addr)
     df_b = pd.read_csv(b_addr)
@@ -2253,6 +2428,21 @@ def read_csv(a_addr, b_addr, name_list_a, name_list_b, filename_single, filename
 
     net_weighted_array_01 = create_network_graph(nodes_list_all_01, edges_list_weight_01)
     net_weighted_array_02 = create_network_graph(nodes_list_all_02, edges_list_weight_02)
+    # 富节点查看节点个数取百分之二十左右 大于14的（这个仅针对于衡量零模型与原始网络的）
+    # degrees = [d for n,d in net_weighted_array_02.degree()]
+    #
+    # for degree in range(74):
+    #     tmp_degrees = [d for d in degrees if d>degree]
+    #     if (len(tmp_degrees) / 300) <= 0.2:
+    #         rich_de = degree
+    #         print(len(tmp_degrees) / 300)
+    #         break
+
+    # 对02进行随机零模型转换
+    if is_ling_modle:
+        # 先测试单层层内的
+        net_weighted_array_02 = unm.rich_club_break(net_weighted_array_02, k=14, nswap=20000, max_tries=100000000)
+
     return total_nodes, net_weighted_array_01, net_weighted_array_02
 
 

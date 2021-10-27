@@ -54,8 +54,8 @@ def random_0k(G0, nswap=1, max_tries=100, connected=1):
 
     n = 0
     swapcount = 0
-    edges = G.edges()   
-    nodes = G.nodes()
+    edges = list(G.edges())
+    nodes = list(G.nodes())
     while swapcount < nswap:
         n=n+1
         u,v = random.choice(edges)      #随机选网络中的一条要断开的边
@@ -70,10 +70,10 @@ def random_0k(G0, nswap=1, max_tries=100, connected=1):
             
             if connected==1:                            #判断是否需要保持联通特性，为1的话则需要保持该特性        
             	if not nx.is_connected(G):              #保证网络是全联通的:若网络不是全联通网络，则撤回交换边的操作
-                    G.add_edge(u,v)
-                    G.add_edge(x,y)
-                    G.remove_edge(u,y)
-                    G.remove_edge(x,v)
+                    G.add_edge(u, v)  # 断旧边
+                    G.remove_edge(x, y)  # 连新边
+                    edges.append((u, v))
+                    edges.remove((x, y))
                     continue 
             swapcount=swapcount+1       
 
@@ -103,7 +103,7 @@ def random_1k(G0,nswap=1, max_tries=100,connected=1):
     swapcount = 0   #有效交换次数
     
     G = copy.deepcopy(G0)
-    keys,degrees = zip(*G.degree().items()) 
+    keys,degrees = zip(*dict(G.degree()).items())
     cdf = nx.utils.cumulative_distribution(degrees) 
    
     while swapcount < nswap:       #有效交换次数小于规定交换次数      
@@ -137,7 +137,8 @@ def random_1k(G0,nswap=1, max_tries=100,connected=1):
                     	G.remove_edge(u,y)
                     	G.remove_edge(x,v)
                     	continue 
-                swapcount=swapcount+1              
+                swapcount=swapcount+1
+    print(f'成功交换了{swapcount}次')
     return G       
 
 def random_2k(G0,nswap=1, max_tries=100,connected=1): 
@@ -160,7 +161,7 @@ def random_2k(G0,nswap=1, max_tries=100,connected=1):
     swapcount = 0   #有效交换次数
     
     G = copy.deepcopy(G0)
-    keys,degrees = zip(*G.degree().items()) 
+    keys,degrees = zip(*dict(G.degree()).items())
     cdf = nx.utils.cumulative_distribution(degrees) 
    
     while swapcount < nswap:       #有效交换次数小于规定交换次数      
@@ -294,7 +295,7 @@ def random_3k(G0,nswap=1,max_tries=100,connected=1):
     swapcount = 0   #有效交换次数
     
     G = copy.deepcopy(G0)
-    keys,degrees = zip(*G.degree().items()) 
+    keys,degrees = zip(*dict(G.degree()).items())
     cdf = nx.utils.cumulative_distribution(degrees) 
    
     while swapcount < nswap:       #有效交换次数小于规定交换次数      
@@ -486,7 +487,7 @@ def rich_club_create(G0, k=1, nswap=1, max_tries=100, connected=1):
             swapcount += 1
             time_start = int(time.time())
             print(f'有效断边重连 {swapcount}次')
-            print(f'还剩下{hubs}这些富节点')
+            # print(f'还剩下{hubs}这些富节点')
         if tn >= max_tries:
             print ('Maximum number of attempts (%s) exceeded '%tn)
             break
@@ -634,6 +635,7 @@ def assort_mixing(G0, k=10, nswap=1, max_tries=100, connected=1):
             e=('Maximum number of swap attempts (%s) exceeded '%tn + 'before desired swaps achieved (%s).'%nswap)
             print(e)
             break
+    # print(f'tn->{tn}')
     return G
 
 
