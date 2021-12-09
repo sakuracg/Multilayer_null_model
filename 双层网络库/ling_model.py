@@ -65,10 +65,11 @@ def create_MultilayerGraphFromPandasEdgeList(df1, df2, source_df1='source', targ
                                              create_using_df1=None, edge_key_df1=None, source_df2='source',
                                              target_df2='target',
                                              edge_attr_df2=None, create_using_df2=None, edge_key_df2=None):
+    """ 只适用于两层节点数相同的双层网络，如果不同请改用单层networkx。该问题不可解决，本作者没有能力去修改multiNetx库 """
     # 创建单层网络
     g1 = mx.from_pandas_edgelist(df1, source_df1, target_df1, edge_attr_df1, create_using_df1, edge_key_df1)
     g2 = mx.from_pandas_edgelist(df2, source_df2, target_df2, edge_attr_df2, create_using_df2, edge_key_df2)
-
+    # g1.edges =
     N = len(list(g1.nodes))
 
     # 创建所有随机网络对应的超矩阵
@@ -79,6 +80,16 @@ def create_MultilayerGraphFromPandasEdgeList(df1, df2, source_df1='source', targ
 
     # 生成多层复杂网络对象实例
     mg = mx.MultilayerGraph(list_of_layers=[g1, g2], inter_adjacency_matrix=adj_block)
+
+    # # 移除g1网络不存在的边
+    # g1_edges = g1.edges
+    # mg_edges_0 = get_edge_0(mg, 0)
+    # print(len(g1_edges))
+    # print(len(mg_edges_0))
+    # for v, u in mg_edges_0:
+    #     if ((v,u) not in g1_edges) and ((u,v) not in g1_edges):
+    #         mg.remove_edge(u,v)
+
     # 设置层内以及层间边缘权重
     mg.set_edges_weights(intra_layer_edges_weight=edge_attr_df1,
                          inter_layer_edges_weight=edge_attr_df1)
@@ -142,6 +153,8 @@ def random_0_model(Graph, N, nswap=1, max_tries=100, connected=True):
                     edges_up.append((u, v))
                     continue
             swapcount = swapcount + 1
+            # print(f'{u}---{v}')
+            # print(f'{x}---{y}')
             print(f'已成功交换{swapcount}次')
         if n >= max_tries:
             print(f"Maximum number of swap attempts {n} exceeded before desired swaps achieved {nswap}.")
@@ -728,10 +741,222 @@ def isRichClubTwo_0_model(Graph, N, k1, k2, rich=True, nswap=1, max_tries=100):
         # 否则就交换上层节点
     return Graph
 
+def mesoscale_changenode_model_cengjian(Graph, str_layer1, str_layer2, nswap=1, analy_layer=0):
+    swapcount = 0  # 已尝试交换节点并成功的次数
+    # 基于这些连边使用igraph创建一个新网络
+    if analy_layer == 0:
+        G_nodes = get_Graph_nodes(str_layer1,' ', 0)
+        Gi = ig.Graph.Read_Edgelist(str_layer1)
+    else:
+        G_nodes = get_Graph_nodes(str_layer2,' ', 0)
+        Gi = ig.Graph.Read_Edgelist(str_layer2)
+
+    G = Gi.as_undirected()        # 检测到的社区+
+    community_list = G.community_multilevel(weights=None, return_levels=False)
+
+    # 提取真正的社区集合
+    community_true = []
+
+    for i in range(len(community_list)):
+        temp_list = community_list[i]
+        if (len(temp_list) < 2) and (temp_list[0] not in G_nodes):
+            continue
+        community_true.append(temp_list)
+
+        # 随机选择一层中的两个社区并选分别选择一个节点进行交换
+
+    # 得到社区的下标集合
+    community_true_index = [i for i in range(len(community_true))]
+    while swapcount < nswap:
+
+        t1, t2 = random.sample(community_true_index, 2)
+        # 取出两个点
+        x_node = random.choice(community_true[t1])
+        y_node = random.choice(community_true[t2])
+        #         print(community_true)
+        #         print(f'{t1}---{t2}')
+        # print(f'{x_node}---{y_node}')
+        # 随机选择两个社区的节点进行交换
+        if x_node == y_node:
+            continue
+        # 两个节点进行交换
+        # 其实也就是交换两个节点所连接的边
+
+        # 找到节点 x and y 的分别边集合
+        edges_all = Graph.edges
+        # 先找到节点x y的所有边
+        x_node_edges_node = []
+        y_node_edges_node = []
+
+        for v, u in edges_all:
+            if x_node == v and y_node != u:
+                x_node_edges_node.append(u)
+            elif x_node == u and y_node != v:
+                x_node_edges_node.append(v)
+            elif y_node == v and x_node != u:
+                y_node_edges_node.append(u)
+            elif y_node == u and x_node != v:
+                y_node_edges_node.append(v)
+
+        # print(x_node_edges_node)
+        # print(y_node_edges_node)
+        # 删除两个邻居节点列表中相同的元素
+        x_node_edges_node_new = [i for i in x_node_edges_node if i not in y_node_edges_node]
+
+        y_node_edges_node_new = [i for i in y_node_edges_node if i not in x_node_edges_node]
+
+        # print('---------------------')
+        # print(x_node_edges_node_new)
+        # print(y_node_edges_node_new)
+        # 交换边
+        if len(x_node_edges_node_new) > 0:
+            for node in x_node_edges_node_new:
+                Graph.remove_edge(x_node, node)
+                Graph.add_edge(y_node, node)
+        if len(y_node_edges_node_new) > 0:
+            for node in y_node_edges_node_new:
+                Graph.remove_edge(node, y_node)
+                Graph.add_edge(node, x_node)
+
+        # 加一
+        swapcount += 1
+        # print(lm.get_edge_0(Graph, 0))
+        # 交换完毕后，改变社区集合节点的位置
+        community_true[t1].remove(x_node)
+        community_true[t1].append(y_node)
+        community_true[t2].remove(y_node)
+        community_true[t2].append(x_node)
+
+    return Graph
+
+def mesoscale_changenode_model_cengnei(Graph, str_layer1, str_layer2, nswap=1, analy_layer=0):
+    swapcount = 0  # 已尝试交换节点并成功的次数
+    # 基于这些连边使用igraph创建一个新网络
+    if analy_layer == 0:
+        G_nodes = get_Graph_nodes(str_layer1,sep=' ', has_name=0)
+        Gi = ig.Graph.Read_Edgelist(str_layer1)
+    else:
+        G_nodes = get_Graph_nodes(str_layer2,' ', 0)
+        Gi = ig.Graph.Read_Edgelist(str_layer2)
+
+    G = Gi.as_undirected()        # 检测到的社区+
+    community_list = G.community_multilevel(weights=None, return_levels=False)
+    # 提取真正的社区集合
+    community_true = []
+
+    for i in range(len(community_list)):
+        temp_list = community_list[i]
+        if (len(temp_list) < 2) and (temp_list[0] not in G_nodes):
+            continue
+        community_true.append(temp_list)
+
+        # 随机选择一层中的两个社区并选分别选择一个节点进行交换
+
+    # 得到社区的下标集合
+    community_true_index = [i for i in range(len(community_true))]
+    while swapcount < nswap:
+
+        t1= random.choice(community_true_index)
+        # 取出两个点
+        x_node,y_node = random.sample(community_true[t1], 2)
+        #         print(community_true)
+        # # print(f'{t1}---{t2}')
+        # print(f'{x_node}---{y_node}')
+        # 随机选择两个社区的节点进行交换
+        if x_node == y_node:
+            continue
+        # 两个节点进行交换
+        # 其实也就是交换两个节点所连接的边
+
+        # 找到节点 x and y 的分别边集合
+        edges_all = Graph.edges
+        # 先找到节点x y的所有边
+        x_node_edges_node = []
+        y_node_edges_node = []
+
+        for v,u in edges_all:
+            if x_node == v and y_node != u:
+                x_node_edges_node.append(u)
+            elif x_node == u and y_node != v:
+                x_node_edges_node.append(v)
+            elif y_node == v and x_node != u:
+                y_node_edges_node.append(u)
+            elif y_node == u and x_node != v:
+                y_node_edges_node.append(v)
+
+        # print(x_node_edges_node)
+        # print(y_node_edges_node)
+        # 删除两个邻居节点列表中相同的元素
+        x_node_edges_node_new = [i for i in x_node_edges_node if i not in y_node_edges_node]
+
+        y_node_edges_node_new = [i for i in y_node_edges_node if i not in x_node_edges_node]
+
+        # print('---------------------')
+        # print(x_node_edges_node_new)
+        # print(y_node_edges_node_new)
+        # 交换边
+        if len(x_node_edges_node_new) > 0:
+            for node in x_node_edges_node_new:
+                Graph.remove_edge(x_node, node)
+                Graph.add_edge(y_node, node)
+        if len(y_node_edges_node_new) > 0:
+            for node in y_node_edges_node_new:
+                Graph.remove_edge(node, y_node)
+                Graph.add_edge(node, x_node)
+        # 加一
+        swapcount += 1
+
+    return Graph
+
+def mesoscale_changenode_model_random(Graph, nswap=1):
+    swapcount = 0  # 已尝试交换节点并成功的次数
+    nodes = Graph.nodes
+    while swapcount < nswap:
+        # 取出两个点
+        x_node,y_node = random.sample(nodes, 2)
+        # 随机选择两个社区的节点进行交换
+        if x_node == y_node:
+            continue
+        # print(f'{x_node}---{y_node}')
+        # 两个节点进行交换
+        # 其实也就是交换两个节点所连接的边
+        # 找到节点 x and y 的分别边集合
+        edges_all = Graph.edges
+        # 先找到节点x y的所有边
+        x_node_edges_node = []
+        y_node_edges_node = []
+
+        for v,u in edges_all:
+            if x_node == v and y_node != u:
+                x_node_edges_node.append(u)
+            elif x_node == u and y_node != v:
+                x_node_edges_node.append(v)
+            elif y_node == v and x_node != u:
+                y_node_edges_node.append(u)
+            elif y_node == u and x_node != v:
+                y_node_edges_node.append(v)
+
+        # 删除两个邻居节点列表中相同的元素
+        x_node_edges_node_new = [i for i in x_node_edges_node if i not in y_node_edges_node]
+        y_node_edges_node_new = [i for i in y_node_edges_node if i not in x_node_edges_node]
+        # 交换边
+        if len(x_node_edges_node_new) > 0:
+            for node in x_node_edges_node_new:
+                Graph.remove_edge(x_node, node)
+                Graph.add_edge(y_node, node)
+        if len(y_node_edges_node_new) > 0:
+            for node in y_node_edges_node_new:
+                Graph.remove_edge(node, y_node)
+                Graph.add_edge(node, x_node)
+        # 加一
+        swapcount += 1
+
+    return Graph
+
 
 def get_edges(Graph, N):
     """
-    已经弃用，找双层网络的边请使用lm.get_edge_0方法
+    已经弃用，有问题。直接返回layer = 0 底层的边
     :param Graph:
     :param N:
     :return:
@@ -752,13 +977,17 @@ def get_edges(Graph, N):
 
 
 # 将双层网络对象转换为csv文件，仅仅是把第一层也就是交换的哪一层导出
-def multiGraph_to_csv(Graph):
+def multiGraph_to_csv(Graph, analy_layer=0):
     N = int(len(Graph.nodes) / 2)
-    richedges0 = get_edges(Graph, N)
+    richedges0 = get_edge_0(Graph, analy_layer)
     list_n1, list_n2 = [], []
     for i in range(len(richedges0)):
-        list_n1.append(richedges0[i][0])
-        list_n2.append(richedges0[i][1])
+        if analy_layer == 1:
+            list_n1.append(richedges0[i][0] - N)
+            list_n2.append(richedges0[i][1] - N)
+        else:
+            list_n1.append(richedges0[i][0])
+            list_n2.append(richedges0[i][1])
     df = pd.DataFrame(({'node1': list_n1, 'node2': list_n2}))
     return df
 
@@ -888,7 +1117,7 @@ def sub_edgesBigAndSmall(edges_list1, edges_list2):
 
 def get_edge_0(Graph, analy_layer):
     """1阶零模型算法中求每次断边重连时第0层的边（时时变化的只有get_intra_layer_edges()总边）
-
+        当analy_layer = 1时，返回的节点标号是加上 N 的
         analy_layer : int (0 | 1)
             choose analy layer.
         """
@@ -896,6 +1125,7 @@ def get_edge_0(Graph, analy_layer):
         return '该网络非原始网络，而是经过Copy函数复制的函数，请修改为原始网络对象'
     if analy_layer == 1:
         return list(Graph.get_intra_layer_edges_of_layer(1))
+    ### 老是这个问题，有的时候好有的时候坏
     intra_edges = list(Graph.get_intra_layer_edges())
     inter_edges = list(Graph.get_inter_layer_edges())
     # 搞掉层间连线
@@ -1203,12 +1433,18 @@ def overall_of_overlap_network(Graph, N):
     edges_layer1 = Graph.get_intra_layer_edges_of_layer(layer=1)
 
     # 找到重叠边的个数
-    for i in range(len(edges_layer0)):
-        temp_edge = edges_layer0[i]
-        for j in range(len(edges_layer1)):
-            if (temp_edge[0] + N, temp_edge[1] + N) == edges_layer1[j]:
+    for i in range(N):
+        for j in range(N):
+            if i == j:
+                continue
+            if ((i, j) in edges_layer0 or (j, i) in (edges_layer0)) and ((i + N, j + N) in edges_layer1 or (j + N, i + N) in (edges_layer1)):
                 even_edge_count += 1
-                break
+    # for i in range(len(edges_layer0)):
+    #     temp_edge = edges_layer0[i]
+    #     for j in range(len(edges_layer1)):
+    #         if (temp_edge[0] + N, temp_edge[1] + N) == edges_layer1[j]:
+    #             even_edge_count += 1
+    #             break
 
     # 计算拥有连边数最少的层，得到其连边数
     edges_layer0_count = len(edges_layer0)
@@ -1326,9 +1562,10 @@ def get_longVector_probability(vector):
     # 把值对应的概率以字典的方式搞出来
     dict_vector_p = {}
     for v in set_vector:
-        # dict_vector_p[v] = round(vector.count(v) / len_vector, 3)  保不保留小数看自己了
+        # dict_vector_p[v] = round(vector.count(v) / len_vector, 2) # 保不保留小数看自己了
         dict_vector_p[v] = vector.count(v) / len_vector
-    probability = [dict_vector_p[v] for v in vector]
+    # probability = [dict_vector_p[v] for v in vector]
+    probability = list(dict_vector_p.values())
     return probability
 
 
@@ -1682,11 +1919,9 @@ def hiuzhi_rich_remain_average_degree(Graph, analy_layer, k1, k2, nswap=20000, m
     sns.lineplot(x="x", y="y", hue="region", data=df)
     plt.show()
 
-
 """
     检验方法
 """
-
 # Z检验
 def z_jianyan(origin_val, mean_val, std_val):
     return (origin_val - mean_val) / std_val
@@ -2008,11 +2243,20 @@ def purity_single(community_list1, community_list2, G1_nodes, G2_nodes):
 def get_list_intersection_length(list1, list2):
     return len(set(list1).intersection(set(list2)))
 
-def get_Graph_nodes(layer_fileName):
+def get_Graph_nodes(layer_fileName, sep, has_name):
+    """
+    得到文件中的节点个数
+    :param layer_fileName:
+    :param sep: 边链接节点的分割符
+    :param has_name: 如果有列名则为1，否则为0
+    :return:
+    """
     nodes = []
     with open(layer_fileName, 'r') as f:
+        if has_name:
+            next(f)
         for line in f:
-            strs = line.strip().split(' ')
+            strs = line.strip().split(sep)
             node1 = int(strs[0])
             node2 = int(strs[1])
             if node1 not in nodes:
@@ -2022,9 +2266,15 @@ def get_Graph_nodes(layer_fileName):
     return nodes
 
 def based_community_layer_similarity_by_purity(layer_edge_1, layer_edge_2):
-
-    G1_nodes = get_Graph_nodes(layer_edge_1)
-    G2_nodes = get_Graph_nodes(layer_edge_2)
+    """
+    这里的格式，txt格式，1 2 以空格当做分隔符
+    文件不允许有多余的数据，格式为从第一行开始一行一条边
+    :param layer_edge_1:
+    :param layer_edge_2:
+    :return:
+    """
+    G1_nodes = get_Graph_nodes(layer_edge_1, ' ', 0)
+    G2_nodes = get_Graph_nodes(layer_edge_2, ' ', 0)
     Gi_1 = ig.Graph.Read_Edgelist(layer_edge_1)
     Gi_2 = ig.Graph.Read_Edgelist(layer_edge_2)  # 基于这些连边使用igraph创建一个新网络
     G1 = Gi_1.as_undirected()
@@ -2108,8 +2358,8 @@ def f_measure(community_list1, community_list2, G1_nodes, G2_nodes):
 
 def based_community_layer_similarity_by_f_measure(layer_edge_1, layer_edge_2):
 
-    G1_nodes = get_Graph_nodes(layer_edge_1)
-    G2_nodes = get_Graph_nodes(layer_edge_2)
+    G1_nodes = get_Graph_nodes(layer_edge_1,' ',0)
+    G2_nodes = get_Graph_nodes(layer_edge_2,' ',0)
     Gi_1 = ig.Graph.Read_Edgelist(layer_edge_1)
     Gi_2 = ig.Graph.Read_Edgelist(layer_edge_2)  # 基于这些连边使用igraph创建一个新网络
     G1 = Gi_1.as_undirected()
@@ -2161,11 +2411,166 @@ def D_value(a_addr, b_addr, filename_single, filename_multi, is_ling_modle=False
     print("third_value", third_value)
     return W1 * first_value + W2 * second_value + W3 * third_value * 0.5
 
+"""
+    信息度量IC计算开始
+"""
+def information_content_IC(AM, directed=0):
+    """
+    该统计量的使用必须两层网络的节点数相同
+    AM: adjacency matrix numpy类型
+    directed：1 if the network is directed,
+              0 otherwise
+    Outputs:
+        Info: the IC of the network
+        NormInfo: the normalized IC
+    """
+    numNodes = AM.shape[0]  # 节点个数
+    linkDensity = sum(sum(AM)) / (numNodes * numNodes)  # 节点个数
+    Info = 0
+
+    # 计算边的HD
+    distanceMatrix = np.arange(numNodes * numNodes).reshape(numNodes, numNodes)
+    for n1 in range(numNodes):
+        for n2 in range(numNodes):
+            if n1 == n2:
+                distanceMatrix[n1][n2] = numNodes
+                continue
+            distanceMatrix[n1][n2] = HD(AM[n1, :], AM[n2, :], AM[:, n1], AM[:, n2])  # TODO
+
+    # 计算每一个节点所损失的信息
+    for k in range(numNodes - 1):
+        tInfo, AM, distanceMatrix = oneIteration(AM, distanceMatrix)
+        #         print(Info)
+        Info += tInfo
+
+    # 不知道还用不用标准化输出
+    # NormInfo = Info / Normalize(linkDensity, numNodes, directed)
+    # print(f'计算出的信息度量为：{Info}'), NormInfo
+
+    return Info
+
+# 一次迭代
+def oneIteration(AM, distanceMatrix):
+    # print(f"AM={AM}")
+    numNodes = AM.shape[0]  # 节点个数
+    minDist = np.min(np.min(distanceMatrix))  # 距离矩阵的最小值
+    maxDist = np.max(np.max(distanceMatrix))  # 距离矩阵的最大值
+
+    if minDist < (2 * numNodes - maxDist):
+        aX = np.min(distanceMatrix, axis=0)
+        bX = np.argmin(distanceMatrix, axis=0)
+
+        bestHD = np.min(aX, axis=0)
+        cX = np.argmin(aX, axis=0)
+    else:
+        aX = np.max(distanceMatrix, axis=0)
+        bX = np.argmax(distanceMatrix, axis=0)
+
+        bestHD = np.max(aX, axis=0)
+        cX = np.argmax(aX, axis=0)
+
+    # 最好的节点和aX中最好的节点标号
+    bestNode = bX[cX]
+    bestNode2 = cX
+
+    if bestNode == bestNode2:
+        bestNode = 0
+        bestNode2 = 0
+
+    p = bestHD / (numNodes * 2)
+    Info = 0
+    if p > 0 and p < 1:
+        Info = - p * np.log2(p) - (1.0 - p) * np.log2(1.0 - p)
+        Info = Info * numNodes * 2
+
+    newDM1 = distanceMatrix
+
+    for n1 in range(numNodes):
+        for n2 in range(numNodes):
+            if n1 == n2:
+                continue
+
+            newDM1[n1][n2] = newDM1[n1][n2] + np.double(AM[n1][bestNode] == AM[n2][bestNode]) - 1
+            newDM1[n1][n2] = newDM1[n1][n2] + np.double(AM[bestNode][n1] == AM[bestNode][n2]) - 1
+    # print(f"bestNode={bestNode}-----numNodes={numNodes}")
+    offset1 = [i for i in range(bestNode - 1)] + [i for i in range(bestNode + 1, numNodes)]
+    # print(f"offset1={offset1}")
+    offset1_len = len(offset1)
+    newDM1 = newDM1[offset1[0]:offset1[offset1_len - 1] + 1, offset1[0]:offset1[offset1_len - 1] + 1]
+
+    newDM2 = distanceMatrix
+
+    for n1 in range(numNodes):
+        for n2 in range(numNodes):
+            if n1 == n2:
+                continue
+
+            newDM2[n1][n2] = newDM2[n1][n2] + np.double(AM[n1][bestNode2] == AM[n2][bestNode2]) - 1
+            newDM2[n1][n2] = newDM2[n1][n2] + np.double(AM[bestNode2][n1] == AM[bestNode2][n2]) - 1
+
+    offset2 = [i for i in range(bestNode2 - 1)] + [i for i in range(bestNode2 + 1, numNodes)]
+    # print(f"offset2={offset2}")
+    offset2_len = len(offset2)
+    newDM2 = newDM2[offset2[0]:offset2[offset2_len - 1] + 1, offset2[0]:offset2[offset2_len - 1] + 1]
+
+    maxV1 = np.max(np.max(newDM1))
+    maxV2 = np.max(np.max(newDM2))
+    minV1 = np.min(np.min(newDM1))
+    minV2 = np.min(np.min(newDM2))
+
+    if maxV1 < (2 * (numNodes - 1) - minV1):
+        maxV1 = 2 * (numNodes - 1) - minV1
+
+    if maxV2 < (2 * (numNodes - 1) - minV2):
+        maxV2 = 2 * (numNodes - 1) - minV2
+
+    if maxV1 > maxV2:
+        newAM = AM[offset1[0]:offset1[offset1_len - 1] + 1, offset1[0]:offset1[offset1_len - 1] + 1]
+        newDM = newDM1
+    else:
+        newAM = AM[offset2[0]:offset2[offset2_len - 1] + 1, offset2[0]:offset2[offset2_len - 1] + 1]
+        newDM = newDM2
+    return Info, newAM, newDM
+
+def HD(vector1, vector2, vector3, vector4):
+    sizeVector = np.max(vector1.shape)
+    answ = np.sum(np.double(vector1 == vector2)) + np.sum(np.double(vector3 == vector4))
+
+    answ = 2 * sizeVector - answ
+    return answ
+
+def approxF(p):
+    if p == 0 or p == 1:
+        approxInfo = 0
+        return approxInfo
+
+    approxInfo = - p * np.log2(p) - (1 - p) * np.log2(1 - p)
+    return approxInfo
+
+def Normalize(p, numNodes, directed):
+    if directed == 1:
+        KMax = 0.1625 - 1.822 * np.power((numNodes + 10.08), -1.098)
+    else:
+        KMax = 0.1622 - 0.6298 * np.power((numNodes + 5.905), -1.132)
+
+    alpha = KMax * 4
+    effP = alpha * p - alpha * p * p
+
+    Info = 0
+
+    for k in range(numNodes, 1, -1):
+        temp = (2 * k) * approxF(effP)
+        Info = Info + temp
+
+    return Info
+
+"""
+    信息度量IC计算结束
+"""
 
 """
     第三项计算开始
 """
-
 
 def third(Graph_a, Graph_b, nodes):
     # FIRST
